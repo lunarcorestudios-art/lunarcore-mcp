@@ -12,6 +12,7 @@ import { createGoogleStudio } from "../dist/adapters/google/google-studio.js";
 import { loadDotEnv } from "../dist/config/env.js";
 import { TOOL_NAMES } from "../dist/tools/index.js";
 import { StudioError } from "../dist/types/errors.js";
+import { exerciseClickUpAdapter } from "./clickup-adapter-smoke.js";
 
 const EXPECTED_TOOLS = [
   "client_list",
@@ -467,26 +468,32 @@ function runProcess(env: Record<string, string>): Promise<{ code: number | null;
 }
 
 async function exerciseRefusals(): Promise<void> {
-  for (const adapter of ["clickup", "google"] as const) {
-    const result = await runProcess({ LUNARCORE_ADAPTER: adapter });
-    assert(result.code !== 0, `${adapter} adapter should refuse to start`);
-    assert(/not available yet/i.test(result.stderr), `${adapter} stderr was ${result.stderr}`);
-    assert(!/stdio ready/.test(result.stderr), `${adapter} placeholder should not become ready`);
-  }
+  const clickupProcess = await runProcess({ LUNARCORE_ADAPTER: "clickup" });
+  assert(clickupProcess.code !== 0, "clickup without credentials should refuse to start");
+  assert(/CLICKUP_API_TOKEN/.test(clickupProcess.stderr), clickupProcess.stderr);
+  assert(/CLICKUP_TEAM_ID/.test(clickupProcess.stderr), clickupProcess.stderr);
+  assert(!/stdio ready/.test(clickupProcess.stderr), "clickup without credentials should not become ready");
+
+  const googleProcess = await runProcess({ LUNARCORE_ADAPTER: "google" });
+  assert(googleProcess.code !== 0, "google adapter should refuse to start");
+  assert(/not available yet/i.test(googleProcess.stderr), googleProcess.stderr);
+  assert(!/stdio ready/.test(googleProcess.stderr), "google placeholder should not become ready");
+
   const unknown = await runProcess({ LUNARCORE_ADAPTER: "notion" });
   assert(unknown.code !== 0, "unknown adapter should fail");
   assert(/Unknown LUNARCORE_ADAPTER/.test(unknown.stderr), unknown.stderr);
 
-  const clickup = createClickUpStudio();
-  assert(clickup.source === "clickup", "clickup placeholder source");
+  let missingCreds: unknown;
   try {
-    await clickup.listClients({});
-    throw new Error("clickup placeholder should throw");
+    createClickUpStudio({});
   } catch (error) {
-    assert(error instanceof StudioError, "clickup error should be a StudioError");
-    assert(error.code === "not_implemented", error.message);
-    assert(/Planned mapping/.test(error.message), error.message);
+    missingCreds = error;
   }
+  assert(
+    missingCreds instanceof Error && /CLICKUP_API_TOKEN/.test(missingCreds.message) && /CLICKUP_TEAM_ID/.test(missingCreds.message),
+    String(missingCreds),
+  );
+
   const google = createGoogleStudio();
   assert(google.source === "google", "google placeholder source");
   try {
@@ -502,9 +509,9 @@ async function exerciseRefusals(): Promise<void> {
     createStudio({ LUNARCORE_ADAPTER: "clickup" });
   } catch (error) {
     refused = true;
-    assert(error instanceof Error && /placeholder/.test(error.message), String(error));
+    assert(error instanceof Error && /CLICKUP_API_TOKEN/.test(error.message), String(error));
   }
-  assert(refused, "createStudio should refuse the clickup adapter");
+  assert(refused, "createStudio should refuse clickup without credentials");
 }
 
 function exerciseDotEnv(): void {
@@ -544,4 +551,5 @@ await exerciseServer();
 await exerciseEnv();
 await exerciseRefusals();
 exerciseDotEnv();
+await exerciseClickUpAdapter();
 console.log(`smoke ok (${EXPECTED_TOOLS.length} tools)`);

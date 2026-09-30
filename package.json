@@ -1,7 +1,7 @@
 {
   "name": "lunarcore-mcp",
   "version": "0.1.0",
-  "description": "Lunarcore Studios OS MCP server. Stable studio verbs over a swappable ClickUp and Google adapter layer. v1 serves an in-memory stub.",
+  "description": "Lunarcore Studios OS MCP server. Stable studio verbs over an in-memory stub or a live ClickUp adapter.",
   "type": "module",
   "bin": {
     "lunarcore-mcp": "./dist/index.js"
